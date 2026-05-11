@@ -32,6 +32,7 @@ class Menu:
         exit_key: str = "0",
         exit_label: str = "Exit",
         exit_message: str = "Exiting Project Gecko Analytics Engine.",
+        invalid_return_label: str = "this menu",
         input_reader: InputReader = input,
         template: MenuTemplate | None = None,
     ) -> None:
@@ -41,6 +42,7 @@ class Menu:
         self.exit_key = exit_key
         self.exit_label = exit_label
         self.exit_message = exit_message
+        self.invalid_return_label = invalid_return_label
         self.input_reader = input_reader
         self.template = template or MenuTemplate()
         self._items_by_key = {item.key: item for item in self.items}
@@ -61,7 +63,7 @@ class Menu:
             if selected_item is None:
                 print()
                 print(f"'{choice}' is not a valid option.")
-                input("Press Enter to return to the main menu...")
+                self.input_reader(f"Press Enter to return to {self.invalid_return_label}...")
                 continue
 
             selected_item.action()

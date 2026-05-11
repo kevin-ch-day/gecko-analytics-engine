@@ -115,6 +115,12 @@ LEGACY_TABLE_ALIASES = {
 
 CYBER_EVENT_ID = "cyber_event_id"
 SECURITY_ID = "security_id"
+MARKET_INDEX_ID = "market_index_id"
+EXCHANGE_ID = "exchange_id"
+EXCHANGE_CODE = "exchange_code"
+TICKER_SYMBOL = "ticker_symbol"
+MARKET_CODE = "market_code"
+HOLIDAY_NAME = "holiday_name"
 EVENT_DATE = "event_date"
 DATE_TYPE = "date_type"
 TRADE_DATE = "trade_date"
