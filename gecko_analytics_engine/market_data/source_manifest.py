@@ -207,10 +207,25 @@ def export_daily_price_source_manifest(
 def build_collection_checklist(result: DailyPriceSourceManifest) -> str:
     """Build the human-readable source-file collection checklist."""
 
+    high_security_count = sum(1 for row in result.security_rows if row.priority == "high")
+    medium_security_count = sum(1 for row in result.security_rows if row.priority == "medium")
     lines = [
         "# Daily Price Collection Checklist",
         "",
-        "## Where Files Go",
+        "## Executive Summary",
+        "",
+        f"- Manifest status: `{result.manifest_status}`",
+        f"- Database: `{result.database_name or 'Unknown'}`",
+        f"- Benchmark files needed: `{len(result.benchmark_rows)}`",
+        f"- Security files needed: `{len(result.security_rows)}`",
+        f"- High-priority security files: `{high_security_count}`",
+        f"- Medium-priority security files: `{medium_security_count}`",
+        f"- Required event-window date range: `{result.required_date_range}`",
+        f"- Preferred import date range: `{result.preferred_date_range}`",
+        "",
+        "Daily AR/CAR remains blocked until the benchmark and linked-security daily OHLCV files are collected, validated, and later imported through a controlled write workflow.",
+        "",
+        "## Source Folders",
         "",
         f"1. Put benchmark files in `{result.indexes_folder}`.",
         f"2. Put security files in `{result.securities_folder}`.",
@@ -224,16 +239,117 @@ def build_collection_checklist(result: DailyPriceSourceManifest) -> str:
         "",
         f"`{CSV_REQUIRED_COLUMNS}`",
         "",
-        "## Benchmark Files Needed",
+        "Accepted adjusted-close spellings should include `Adj Close`, `Adj_Close`, or `adjusted_close`. Dates should be parseable as calendar dates and should represent trading dates, not import timestamps.",
         "",
+        "## Benchmark Collection Targets",
+        "",
+        "| Priority | Index | Name | Filename Patterns | Required Range | Preferred Range | Target Table | Notes |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
+    if result.benchmark_rows:
+        for row in result.benchmark_rows:
+            lines.append(
+                "| "
+                f"{row.priority} | "
+                f"{row.index_code or row.market_index_id or 'Unknown'} | "
+                f"{row.index_name or ''} | "
+                f"`{row.expected_filename_patterns}` | "
+                f"{row.required_date_range} | "
+                f"{row.preferred_date_range} | "
+                f"`{row.canonical_target_table}` | "
+                f"{row.notes} |"
+            )
+    else:
+        lines.append("| none | none | | | | | | |")
+
+    lines.extend(
+        [
+            "",
+            "Benchmark guidance:",
+            "",
+            "- `SP500` should be treated as the primary broad-market benchmark candidate after repair.",
+            "- `DJIA` can support continuity with the prior paper and may be useful as an alternate benchmark.",
+            "- `NASDAQ_COMP` can support tech-heavy robustness checks.",
+            "- Keep `index_daily_prices` as the canonical target table.",
+            "- Do not use `dji_daily_prices` as canonical unless a future migration explicitly bridges or populates it.",
+            "",
+            "## Security Collection Targets",
+            "",
+            "| Priority | Ticker | Company | Exchange | Filename Patterns | Required Range | Preferred Range | Current Rows | Density | Affected Rows | Target Table |",
+            "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    if result.security_rows:
+        for row in sorted(result.security_rows, key=lambda item: (0 if item.priority == "high" else 1, -item.affected_rows, item.ticker_symbol)):
+            lines.append(
+                "| "
+                f"{row.priority} | "
+                f"{row.ticker_symbol} | "
+                f"{row.company_name or ''} | "
+                f"{row.exchange_code or 'Unknown'} | "
+                f"`{row.expected_filename_patterns}` | "
+                f"{row.required_date_range} | "
+                f"{row.preferred_date_range} | "
+                f"{row.current_row_count} | "
+                f"{_fmt_float(row.current_density_pct)}% | "
+                f"{row.affected_rows} | "
+                f"`{row.canonical_target_table}` |"
+            )
+    else:
+        lines.append("| none | none | | | | | | 0 | | 0 | |")
+
+    lines.extend(
+        [
+            "",
+            "## File Naming Examples",
+            "",
+            "- Benchmark examples: `SP500_2012_2026.csv`, `SPX_daily_2012_2026.csv`, `DJIA_2012_2026.csv`, `IXIC_daily_2012_2026.csv`.",
+            "- Security examples: `JBSAY_daily_2012_2026.csv`, `TMUS_daily_2012_2026.csv`, `VZ_2012_2026.csv`.",
+            "- Keep one ticker or index per file unless a future importer explicitly supports multi-symbol files.",
+            "",
+            "## Validation Rules Before Import",
+            "",
+            "- Files must contain daily OHLCV rows, not weekly or monthly snapshots.",
+            "- Files should have one row per ticker/index per trading day.",
+            "- Duplicate date rows should be rejected or reconciled before import.",
+            "- Weekend rows should be investigated before import.",
+            "- Holiday rows should generally be excluded unless the source proves a valid special trading session.",
+            "- Adjusted close should be present when the source provides it.",
+            "- Date coverage should span the required range at minimum and the preferred range when possible.",
+            "- Existing database rows should not be overwritten until a later import workflow defines reconciliation rules.",
+            "",
+            "## Operator Workflow",
+            "",
+            "1. Collect benchmark CSV files and place them in `data/raw/indexes/`.",
+            "2. Collect linked-security CSV files and place them in `data/raw/securities/`.",
+            "3. Run `python -m gecko_analytics_engine`.",
+            "4. Select `2. Market Data`.",
+            "5. Select `6. Validate Candidate Price CSVs`.",
+            "6. Review validator output and exports before any import sprint.",
+            "",
+            "## Do Not Do Yet",
+            "",
+            "- Do not manually edit MariaDB price tables.",
+            "- Do not import files directly with ad hoc SQL.",
+            "- Do not calculate AR/CAR from the current weekly-like price data.",
+            "- Do not train ML models until daily data repair and event-study outputs are stable.",
+        ]
+    )
+
+    lines.extend(
+        [
+            "",
+            "## Compact Benchmark Files Needed",
+            "",
+        ]
+    )
     if result.benchmark_rows:
         for row in result.benchmark_rows:
             lines.append(f"- `{row.index_code or row.market_index_id}`: `{row.expected_filename_patterns}` ({row.priority})")
     else:
         lines.append("- None.")
 
-    lines.extend(["", "## Security Files Needed", ""])
+    lines.extend(["", "## Compact Security Files Needed", ""])
     if result.security_rows:
         for row in result.security_rows:
             lines.append(f"- `{row.ticker_symbol}`: `{row.expected_filename_patterns}` ({row.priority})")
